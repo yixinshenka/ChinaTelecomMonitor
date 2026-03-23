@@ -31,6 +31,7 @@ ql repo https://github.com/Cp0204/ChinaTelecomMonitor.git "telecom_monitor" "" "
 | ---------------------- | --------------------- | --------------------------------------------- |
 | `TELECOM_USER`         | `18912345678password` | 手机号密码直接拼接，密码为6位数字，会自动截取 |
 | `TELECOM_FLUX_PACKAGE` | `true` (默认)         | 推送流量包明细，`false` 则只推送基本信息      |
+| `TELECOM_ONLY_WARN`    | `false` (默认)        | `true` 则只在流量使用超过均匀范围时通知       |
 
 推送内容示例：
 

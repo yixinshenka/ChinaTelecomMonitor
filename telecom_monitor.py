@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Repo: https://github.com/Cp0204/ChinaTelecomMonitor
 # ConfigFile: telecom_config.json
-# Modify: 2025-07-08
+# Modify: 2026-03-23
 
 """
 任务名称
@@ -30,6 +30,7 @@ CONFIG_DATA = {}
 NOTIFYS = []
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "telecom_config.json"
 TELECOM_FLUX_PACKAGE = os.environ.get("TELECOM_FLUX_PACKAGE", "true").lower() != "false"
+TELECOM_ONLY_WARN = os.environ.get("TELECOM_ONLY_WARN", "false").lower() == "true"
 
 
 # 发送通知消息
@@ -196,9 +197,8 @@ def main():
         if summary["flowOver"] == 0
         else f"-{telecom.convert_flow(summary['flowOver'],'GB',2)} / {telecom.convert_flow(summary['commonTotal'],'GB',2)} GB"
     )
-    common_str = (
-        f"{common_str} {usage_status_icon(summary['commonUse'],summary['commonTotal'])}"
-    )
+    status_icon = usage_status_icon(summary["commonUse"], summary["commonTotal"])
+    common_str = f"{common_str} {status_icon}"
     special_str = (
         f"{telecom.convert_flow(summary['specialUse'], 'GB', 2)} / {telecom.convert_flow(summary['specialTotal'], 'GB', 2)} GB"
         if summary["specialTotal"] > 0
@@ -223,10 +223,14 @@ def main():
 
     # 通知
     if NOTIFYS:
-        notify_body = "\n".join(NOTIFYS)
         print(f"===============推送通知===============")
-        send_notify("【电信套餐用量监控】", notify_body)
-        print()
+        if TELECOM_ONLY_WARN and status_icon == "🟢":
+            print("流量使用在均匀范围内，跳过通知")
+            print()
+        else:
+            notify_body = "\n".join(NOTIFYS)
+            send_notify("【电信套餐用量监控】", notify_body)
+            print()
 
     update_config()
 
