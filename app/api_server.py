@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # _*_ coding:utf-8 _*_
-
 import os
 import sys
 import json
 from datetime import datetime
 from flask import Flask, request, jsonify
-from flask_cors import CORS  # 
+from flask_cors import CORS
 
 # 导入父目录的依赖
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,13 +16,12 @@ from telecom_class import Telecom
 telecom = Telecom()
 
 app = Flask(__name__)
-CORS(app)  #
+CORS(app)  # 开启跨域，支持Scriptable
 app.json.ensure_ascii = False
 app.json.sort_keys = False
 
 # 登录信息存储文件
 LOGIN_INFO_FILE = os.environ.get("CONFIG_PATH", "./config/login_info.json")
-
 
 def load_login_info():
     """加载本地登录信息"""
@@ -33,13 +31,11 @@ def load_login_info():
     except FileNotFoundError:
         return {}
 
-
 def save_login_info(login_info):
     """保存登录信息到本地"""
     os.makedirs(os.path.dirname(LOGIN_INFO_FILE), exist_ok=True)
     with open(LOGIN_INFO_FILE, "w", encoding="utf-8") as f:
         json.dump(login_info, f, ensure_ascii=False, indent=2)
-
 
 @app.route("/login", methods=["POST", "GET"])
 def login():
@@ -51,7 +47,6 @@ def login():
     elif whitelist_num := os.environ.get("WHITELIST_NUM"):
         if not phonenum in whitelist_num:
             return jsonify({"message": "手机号不在白名单"}), 400
-
     login_info = load_login_info()
     data = telecom.do_login(phonenum, password)
     if data.get("responseData").get("resultCode") == "0000":
@@ -65,7 +60,6 @@ def login():
         return jsonify(data), 200
     else:
         return jsonify(data), 400
-
 
 def query_data(query_func, **kwargs):
     """
@@ -100,18 +94,15 @@ def query_data(query_func, **kwargs):
     else:
         return jsonify(login_data), 400
 
-
 @app.route("/qryImportantData", methods=["POST", "GET"])
 def qry_important_data():
     """查询基本数据接口"""
     return query_data(telecom.qry_important_data)
 
-
 @app.route("/userFluxPackage", methods=["POST", "GET"])
 def user_flux_package():
     """查询流量包接口"""
     return query_data(telecom.user_flux_package)
-
 
 @app.route("/qryShareUsage", methods=["POST", "GET"])
 def qry_share_usage():
@@ -122,19 +113,25 @@ def qry_share_usage():
         data = request.args
     return query_data(telecom.qry_share_usage, billing_cycle=data.get("billing_cycle"))
 
-
 @app.route("/summary", methods=["POST", "GET"])
 def summary():
     """查询基本数据简化接口"""
-    important_data, status_code = query_data(telecom.qry_important_data)
-    if status_code == 200:
-        data = telecom.to_summary(
-            json.loads(important_data.data)["responseData"]["data"]
-        )
-        return jsonify(data), 200
-flask-cors
+    try:
+        important_data, status_code = query_data(telecom.qry_important_data)
+        if status_code == 200:
+            raw_data = json.loads(important_data.data)["responseData"]["data"]
+            data = telecom.to_summary(raw_data)
+            return jsonify(data), 200
+        else:
+            return important_data, status_code
+    except Exception as e:
+        return jsonify({
+            "code": 500,
+            "message": f"摘要数据处理失败: {str(e)}",
+            "tip": "你可以直接使用 /qryImportantData 查看原始数据"
+        }), 200
 
 if __name__ == "__main__":
-    # 自动适配云平台端口，优先读取环境变量 PORT，没有就用默认的 10000
+    # 自动适配云平台端口
     port = int(os.environ.get("PORT", 10000))
     app.run(debug=os.environ.get("DEBUG", False), host="0.0.0.0", port=port)
