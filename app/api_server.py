@@ -133,4 +133,6 @@ def summary():
 
 
 if __name__ == "__main__":
-    app.run(debug=os.environ.get("DEBUG", False), host="0.0.0.0", port=10000)
+    # 自动适配云平台端口，优先读取环境变量 PORT，没有就用默认的 10000
+    port = int(os.environ.get("PORT", 10000))
+    app.run(debug=os.environ.get("DEBUG", False), host="0.0.0.0", port=port)
