@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # _*_ coding:utf-8 _*_
-
 import re
 import base64
 import random
@@ -12,10 +11,8 @@ from Crypto.Cipher import PKCS1_v1_5
 from requests.adapters import HTTPAdapter
 from urllib3.util.ssl_ import create_urllib3_context
 
-
 class TelecomSSLAdapter(HTTPAdapter):
     """自定义适配器解决SSL证书问题"""
-
     def __init__(self):
         self.ssl_context = None
         super().__init__()
@@ -26,8 +23,7 @@ class TelecomSSLAdapter(HTTPAdapter):
             self.ssl_context.set_ciphers("DEFAULT:@SECLEVEL=1")
             self.ssl_context.load_verify_locations(cafile=certifi.where())
         pool_kwargs["ssl_context"] = self.ssl_context
-        return super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
-
+        return super().init_poolmanager(connections, maxsize, block=False, **pool_kwargs)
 
 class Telecom:
     def __init__(self):
@@ -88,7 +84,7 @@ PMpq0/XKBO8lYhN/gwIDAQAB
         password = password or self.password
         uuid = str(random.randint(1000000000000000, 9999999999999999))
         ts = datetime.now().strftime("%Y%m%d%H%M%S")
-        enc_str = f"iPhone 14 13.2.{uuid[:12]}{phonenum}{ts}{password}0$$$0."
+        enc_str = f"iPhone 14 13.2.{uuid[:12]}{phonenum}{ts}{password}0\$\$\$0."
         body = {
             "content": {
                 "fieldData": {
@@ -227,101 +223,131 @@ PMpq0/XKBO8lYhN/gwIDAQAB
         if not data:
             return {}
         phonenum = phonenum or self.phonenum
-        # 总流量
-        total_amount = data["flowInfo"].get("totalAmount") or {}
-        flow_use = int(total_amount.get("used") or 0)
-        flow_balance = int(total_amount.get("balance") or 0)
-        flow_total = flow_use + flow_balance
-        flow_over = int(total_amount.get("over") or 0)
-        # 通用流量
-        common_flow = data["flowInfo"].get("commonFlow") or {}
-        common_use = int(common_flow.get("used") or 0)
-        common_balance = int(common_flow.get("balance") or 0)
-        common_total = common_use + common_balance
-        common_over = int(common_flow.get("over") or 0)
-        # 专用流量
-        special_amount = data["flowInfo"].get("specialAmount") or {}
-        special_use = int(special_amount.get("used") or 0)
-        special_balance = int(special_amount.get("balance") or 0)
-        special_total = special_use + special_balance
-        # 语音通话
-        voice_usage = int(data["voiceInfo"]["voiceDataInfo"]["used"] or 0)
-        voice_balance = int(data["voiceInfo"]["voiceDataInfo"]["balance"] or 0)
-        voice_total = int(data["voiceInfo"]["voiceDataInfo"]["total"] or 0)
-        # 余额
-        balance = int(
-            float(data["balanceInfo"]["indexBalanceDataInfo"]["balance"] or 0) * 100
-        )
-        # 流量包列表
-        flowItems = []
-        flow_lists = data.get("flowInfo", {}).get("flowList", [])
-        for item in flow_lists:
-            if "流量" not in item["title"]:
-                continue
-            # 常规流量
-            if "已用" in item["leftTitle"] and "剩余" in item["rightTitle"]:
-                item_use = self.convert_flow(item["leftTitleHh"], "KB")
-                item_balance = self.convert_flow(item["rightTitleHh"], "KB")
-                item_total = item_use + item_balance
-            # 常规流量，超流量
-            elif "超出" in item["leftTitle"] and "/" in item["rightTitleEnd"]:
-                item_balance = -self.convert_flow(item["leftTitleHh"], "KB")
-                item_use = (
-                    self.convert_flow(item["rightTitleEnd"].split("/")[1], "KB")
-                    - item_balance
-                )
-                item_total = item_use + item_balance
-            # 无限流量，达量降速
-            elif "已用" in item["leftTitle"] and "降速" in item["rightTitle"]:
-                item_total = self.convert_flow(
-                    re.search(r"(\d+[KMGT]B)", item["rightTitle"]).group(1), "KB"
-                )
-                item_use = self.convert_flow(item["leftTitleHh"], "KB")
-                item_balance = item_total - item_use
-            # 忽略其他不能识别的情形
-            else:
-                print(f"Ignore flow: {item}")
-                continue
-            flowItems.append(
-                {
-                    "name": item["title"],
-                    "use": item_use,
-                    "balance": item_balance,
-                    "total": item_total,
-                }
+        try:
+            # 总流量（兼容字段缺失）
+            flow_info = data.get("flowInfo", {})
+            total_amount = flow_info.get("totalAmount") or {}
+            flow_use = int(total_amount.get("used") or 0)
+            flow_balance = int(total_amount.get("balance") or 0)
+            flow_total = flow_use + flow_balance
+            flow_over = int(total_amount.get("over") or 0)
+
+            # 通用流量
+            common_flow = flow_info.get("commonFlow") or {}
+            common_use = int(common_flow.get("used") or 0)
+            common_balance = int(common_flow.get("balance") or 0)
+            common_total = common_use + common_balance
+            common_over = int(common_flow.get("over") or 0)
+
+            # 专用流量
+            special_amount = flow_info.get("specialAmount") or {}
+            special_use = int(special_amount.get("used") or 0)
+            special_balance = int(special_amount.get("balance") or 0)
+            special_total = special_use + special_balance
+
+            # 语音通话（兼容没有语音套餐的情况）
+            voice_info = data.get("voiceInfo", {}).get("voiceDataInfo", {})
+            voice_usage = int(voice_info.get("used") or 0)
+            voice_balance = int(voice_info.get("balance") or 0)
+            voice_total = int(voice_info.get("total") or 0)
+
+            # 余额（兼容余额字段缺失）
+            balance_info = data.get("balanceInfo", {}).get("indexBalanceDataInfo", {})
+            balance = int(
+                float(balance_info.get("balance") or 0) * 100
             )
-        summary = {
-            "phonenum": phonenum,
-            "balance": balance,
-            "voiceUsage": voice_usage,
-            "voiceBalance": voice_balance,
-            "voiceTotal": voice_total,
-            "flowUse": flow_use,
-            "flowTotal": flow_total,
-            "flowOver": flow_over,
-            "commonUse": common_use,
-            "commonTotal": common_total,
-            "commonOver": common_over,
-            "specialUse": special_use,
-            "specialTotal": special_total,
-            "createTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "flowItems": flowItems,
-        }
-        return summary
+
+            # 流量包列表
+            flowItems = []
+            flow_lists = flow_info.get("flowList", [])
+            for item in flow_lists:
+                if not item or "流量" not in item.get("title", ""):
+                    continue
+                try:
+                    # 常规流量
+                    if "已用" in item.get("leftTitle", "") and "剩余" in item.get("rightTitle", ""):
+                        item_use = self.convert_flow(item.get("leftTitleHh"), "KB")
+                        item_balance = self.convert_flow(item.get("rightTitleHh"), "KB")
+                        item_total = item_use + item_balance
+                    # 常规流量，超流量
+                    elif "超出" in item.get("leftTitle", "") and "/" in item.get("rightTitleEnd", ""):
+                        item_balance = -self.convert_flow(item.get("leftTitleHh"), "KB")
+                        right_part = item.get("rightTitleEnd", "").split("/")
+                        if len(right_part) < 2:
+                            continue
+                        item_use = (
+                            self.convert_flow(right_part[1], "KB")
+                            - item_balance
+                        )
+                        item_total = item_use + item_balance
+                    # 无限流量，达量降速（加了正则匹配失败的兼容）
+                    elif "已用" in item.get("leftTitle", "") and "降速" in item.get("rightTitle", ""):
+                        match = re.search(r"(\d+[KMGT]B)", item.get("rightTitle", ""))
+                        if not match:
+                            print(f"Ignore unrecognized flow item: {item}")
+                            continue
+                        item_total = self.convert_flow(match.group(1), "KB")
+                        item_use = self.convert_flow(item.get("leftTitleHh"), "KB")
+                        item_balance = item_total - item_use
+                    # 忽略其他不能识别的情形
+                    else:
+                        print(f"Ignore flow: {item}")
+                        continue
+
+                    flowItems.append(
+                        {
+                            "name": item["title"],
+                            "use": item_use,
+                            "balance": item_balance,
+                            "total": item_total,
+                        }
+                    )
+                except Exception as e:
+                    print(f"Skip error flow item: {item}, error: {e}")
+                    continue
+
+            summary = {
+                "phonenum": phonenum,
+                "balance": balance,
+                "voiceUsage": voice_usage,
+                "voiceBalance": voice_balance,
+                "voiceTotal": voice_total,
+                "flowUse": flow_use,
+                "flowTotal": flow_total,
+                "flowOver": flow_over,
+                "commonUse": common_use,
+                "commonTotal": common_total,
+                "commonOver": common_over,
+                "specialUse": special_use,
+                "specialTotal": special_total,
+                "createTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "flowItems": flowItems,
+            }
+            return summary
+        except Exception as e:
+            print(f"to_summary error: {e}, data: {data}")
+            return {
+                "phonenum": phonenum,
+                "error": str(e),
+                "raw_data_available": True
+            }
 
     def convert_flow(self, size_str, target_unit="KB", decimal=0):
         unit_dict = {"KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
         if not size_str:
             return 0
-        if isinstance(size_str, str):
-            size, unit = float(size_str[:-2]), size_str[-2:]
-        elif isinstance(size_str, (int, float)):
-            size, unit = size_str, "KB"
-        if unit in unit_dict or target_unit in unit_dict:
-            return (
-                int(size * unit_dict[unit] / unit_dict[target_unit])
-                if decimal == 0
-                else round(size * unit_dict[unit] / unit_dict[target_unit], decimal)
-            )
-        else:
-            raise ValueError("Invalid unit")
+        try:
+            if isinstance(size_str, str):
+                size, unit = float(size_str[:-2]), size_str[-2:]
+            elif isinstance(size_str, (int, float)):
+                size, unit = size_str, "KB"
+            if unit in unit_dict or target_unit in unit_dict:
+                return (
+                    int(size * unit_dict[unit] / unit_dict[target_unit])
+                    if decimal == 0
+                    else round(size * unit_dict[unit] / unit_dict[target_unit], decimal)
+                )
+            else:
+                raise ValueError("Invalid unit")
+        except:
+            return 0
