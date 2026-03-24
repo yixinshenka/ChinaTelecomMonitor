@@ -1,2 +1,6 @@
-pycryptodome
 requests
+lxml
+pycryptodome
+certifi
+flask
+flask-cors
