@@ -6,6 +6,7 @@ import sys
 import json
 from datetime import datetime
 from flask import Flask, request, jsonify
+from flask_cors import CORS  # 
 
 # 导入父目录的依赖
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +17,7 @@ from telecom_class import Telecom
 telecom = Telecom()
 
 app = Flask(__name__)
+CORS(app)  #
 app.json.ensure_ascii = False
 app.json.sort_keys = False
 
@@ -130,7 +132,7 @@ def summary():
             json.loads(important_data.data)["responseData"]["data"]
         )
         return jsonify(data), 200
-
+flask-cors
 
 if __name__ == "__main__":
     # 自动适配云平台端口，优先读取环境变量 PORT，没有就用默认的 10000
